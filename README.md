@@ -2,16 +2,16 @@
 Image processing script for calculation of cell viability of 3D spheroids in microfluidic arrays. 
 
 # Installation
-'''
+```
 pip install -r requirements.txt
-'''
+```
 # Image pre-processing
 The best performance is assumed for the images of single quadruplet device. For calculation of cell viability two channels (0:live and 1:dead) are required.
 
 # Running the script
-'''
+```
 python live-dead.py
-'''
+```
 Estimation of the absolute cell viability values for single time point:
 1.	Analysis of images
 2.	Browse - Select the folder with the file
