@@ -18,7 +18,9 @@ Estimation of the absolute cell viability values for single time point:
 3.	Select the image
 4.	Load image
 5.	Grid 
+
 ![image](https://user-images.githubusercontent.com/61687224/188294128-f41547ca-cae6-47fb-8912-bdc4f78e01b9.png)
+
 6. Report
 7.	Save the results
 
