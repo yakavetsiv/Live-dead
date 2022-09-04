@@ -11,22 +11,15 @@ import cv2
 import numpy as np
 import json
 import pandas as pd
-import math
 
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.ticker import NullFormatter  # useful for `logit` scale
+
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from skimage import io
+from skimage.filters import threshold_triangle
 
-from skimage import data, io, filters, transform
-from skimage.morphology import closing, square
-from skimage.filters import threshold_otsu, threshold_yen, threshold_triangle
-from skimage.segmentation import clear_border
-from skimage.morphology import closing, square
-
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib import cm
+from utils.image_processing import *
+from utils.utils import *
+from utils.plots import *
 
 
 settings = {
@@ -82,25 +75,20 @@ calc_flag = False
 device_type = settings['device_types'][settings['default_device_type']]
 cell_type = settings['cell_types'][settings['default_cell_type']]
 
+#### merging of the brightfield image and the defined regions
 
-
-            
-def load_settings(name):
-    with open(name) as f:
-        data = json.load(f)
-    return data
-
-def save_settings(name, fit_data):
-    with open(name, 'w') as json_file:
-        json.dump(fit_data, json_file)
-
-def show_img(image_raw, name, scale):
-    cv2.namedWindow(name, cv2.WINDOW_AUTOSIZE)  
-    cv2.moveWindow(name, 40,30)
-    image_print = transform.resize(image_raw, (image_raw.shape[0]//scale, image_raw.shape[1]//scale))   
-    cv2.imshow(name,image_print)
+def draw_regions(cords, image, radius, window):
+        
     
+    window['-SEG-'].update(len(cords))
+    image_bf_s = image.copy()
     
+    for cord in cords:
+        cent_x, cent_y = cord
+        image_bf_s = cv2.circle(image_bf_s, (int(cent_x), int(cent_y)), radius, [0], 5)
+    return image_bf_s 
+
+
 def on_mouse_crop(event, x, y, flags, params):
     global image_bf
     global image_live, image_dead
@@ -138,63 +126,6 @@ def on_mouse_crop(event, x, y, flags, params):
         #### show updated brightfield image
         show_img(image_bf, 'BF', scaling_factor)
 
-def nothing(event, x, y, flags, params):
-    pass
-
-def automatic_brightness_and_contrast(image, clip_hist_percent=1):
-
-    # Calculate grayscale histogram
-    hist,bins = np.histogram(image.ravel(),512,range=[0,1])
-    hist_size = len(hist)
-
-
-    # Calculate cumulative distribution from the histogram
-    accumulator = []
-    accumulator.append(float(hist[0]))
-    for index in range(1, hist_size):
-        accumulator.append(accumulator[index - 1] + float(hist[index]))
-    
-    
-    # Locate points to clip
-    maximum = accumulator[-1]
-    clip_hist_percent *= (maximum/100.0)
-    clip_hist_percent /= 2.0
-
-    # Locate left cut
-    minimum_gray = 0
-    while accumulator[minimum_gray] < clip_hist_percent:
-        minimum_gray += 1
-
-    # Locate right cut
-    maximum_gray = hist_size - 1
-    while accumulator[maximum_gray] >= (maximum - clip_hist_percent):
-        maximum_gray -= 1
-
-    # Calculate alpha and beta values
-    alpha = 255 / (maximum_gray - minimum_gray) *255
-    #beta = -minimum_gray * alpha
-    beta = 0
-    
-    auto_result = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
-    return (auto_result, alpha, beta)
-
-
-def filelist(folder, ext):
-    try:
-        # Get list of files in folder
-        file_list = os.listdir(folder)
-    except:
-        file_list = []
-    fnames = [
-        f
-        for f in file_list
-        if os.path.isfile(os.path.join(folder, f)) and f.lower().endswith((ext))
-    ]
-    return fnames
-
-def crop(image_raw, x_min, x_max, y_min, y_max):
-    image = image_raw[int(x_min):int(x_max), int(y_min):int(y_max)]
-    return image
 
 
 #### adding/removal of the region using the mouse left button click
@@ -219,7 +150,8 @@ def on_mouse_rem(event, x, y, flags, params):
                     flag = 1
                     cords = np.delete(cords, i, axis=0)
                     #### show updated regions
-                    image_bf_s = draw_regions(cords, image_bf, device_type)
+                    
+                    image_bf_s = draw_regions(cords, image_bf, radius, window)
                     show_img(image_bf_s, 'Segment', scaling_factor)
                     
         #### region was NOT found: add a new region with the coordinates of the chosen pixel
@@ -228,13 +160,16 @@ def on_mouse_rem(event, x, y, flags, params):
             cord = np.array([(x*scaling_factor, y*scaling_factor)])
             cords = np.append(cords, cord).reshape(l+1, 2)
             #### show updated regions
-            image_bf_s = draw_regions(cords, image_bf, device_type)
+
+            image_bf_s = draw_regions(cords, image_bf, radius, window)
             show_img(image_bf_s, 'Segment', scaling_factor)
             
+
+
 #### defining the grid using 3 points (1-top left, 2-bottom left, 3-bottom right) of the grid corners
 def on_mouse_grid(event, x, y, flags, params):
-    global cords
-    global image_bf
+    global cords 
+    global image_bf 
     global settings
     global flag_grid, flag_seg
     global device_type
@@ -259,7 +194,7 @@ def on_mouse_grid(event, x, y, flags, params):
                         flag = 1
                         cords = np.delete(cords, i, axis=0)
                         #### show updated regions
-                        image_bf_s = draw_regions(cords, image_bf, device_type)
+                        image_bf_s = draw_regions(cords, image_bf, radius, window)
                         show_img(image_bf_s, 'Segment', scaling_factor)
                         
             
@@ -300,527 +235,10 @@ def on_mouse_grid(event, x, y, flags, params):
                 
                 #### show updated regions
 
-                image_bf_s = draw_regions(cords, image_bf, device_type)
+                image_bf_s = draw_regions(cords, image_bf, radius, window)
                 show_img(image_bf_s, 'Segment', scaling_factor)
                 
-#### defining of the coordinates of the wells using the grid
-def grid(cord_1, cord_2, cord_3, cord_4, rows, columns, devices): 
-    
-    #### caclulation of the distances between the wells in the grid
-    dy_rows = (cord_2[1] - cord_1[1])/(rows-1)
-    dx_rows = (cord_2[0] - cord_1[0])/(rows-1)
 
-    dy_columns = (cord_3[1] - cord_2[1])/(columns-1)
-    dx_columns = (cord_3[0] - cord_2[0])/(columns-1)
-    
-    #### creation of 2D array of the coordinates of the wells
-    wells = np.zeros((columns*devices,rows,2))
-    wells[0][0] = cord_1
-    wells[0][rows-1] = cord_2
-    wells[columns-1][rows-1] = cord_3
-
-    for i in range(columns):
-        x = wells[0][0][0] + dx_columns*i
-        y = wells[0][0][1] + dy_columns*i
-        wells[i][0] = (x,y)
-
-        for j in range(rows):
-            x = wells[i][0][0] + dx_rows*j
-            y = wells[i][0][1] + dy_rows*j
-            wells[i][j] = (x,y)
-    
-    
-    if (devices > 1):
-        dy_devices = (cord_4[1] - cord_3[1])/(devices-1)
-        dx_devices = (cord_4[0] - cord_3[0])/(devices-1)
-        
-        for k in range(devices-1):
-                for i in range(columns):
-                    x = wells[0][0][0] + dx_columns*i + dx_devices*(k+1)
-                    y = wells[0][0][1] + dy_columns*i + dy_devices*(k+1)
-                    wells[i+columns*(k+1)][0] = (x,y)
-
-                    for j in range(rows):
-                        x = wells[i+columns*(k+1)][0][0] + dx_rows*j 
-                        y = wells[i+columns*(k+1)][0][1] + dy_rows*j
-                        wells[i+columns*(k+1)][j] = (x,y)
-            
-    
-    #### reshaping of 2D array to the list of the coordinates
-    cords = np.reshape(wells,(-1,2))  
-    cords.tolist()
-    return cords
-
-def grid_1ch(cord_1, cord_2, cord_3, columns, devices): 
-    
-    #### caclulation of the distances between the wells in the grid
-
-    dy_columns = (cord_2[1] - cord_1[1])/(columns-1)
-    dx_columns = (cord_2[0] - cord_1[0])/(columns-1)
-    
-    #### creation of 2D array of the coordinates of the wells
-    wells = np.zeros((columns*devices,1,2))
-    wells[0][0] = cord_1
-    wells[columns-1][0] = cord_2
-
-    for i in range(columns):
-        x = wells[0][0][0] + dx_columns*i
-        y = wells[0][0][1] + dy_columns*i
-        wells[i][0] = (x,y)
-        
-    if (devices > 1):
-        dy_devices = (cord_3[1] - cord_2[1])/(devices-1)
-        dx_devices = (cord_3[0] - cord_2[0])/(devices-1)
-        
-        for k in range(devices-1):
-            for i in range(columns):
-                x = wells[0][0][0] + dx_columns*i + dx_devices*(k+1)
-                y = wells[0][0][1] + dy_columns*i + dy_devices*(k+1)
-                wells[i+columns*(k+1)][0] = (x,y)
-
-    #### reshaping of 2D array to the list of the coordinates
-    cords = np.reshape(wells,(-1,2))  
-    cords.tolist()
-    return cords
-
-
-#### merging of the brightfield image and the defined regions
-def draw_regions(cords, image, device_type):
-    global settings
-    global window
-        
-    radius = settings['radius'][device_type]
-    window['-SEG-'].update(len(cords))
-    image_bf_s = image.copy()
-    
-    for cord in cords:
-        cent_x, cent_y = cord
-        image_bf_s = cv2.circle(image_bf_s, (int(cent_x), int(cent_y)), radius, [0], 5)
-    return image_bf_s 
-
-
-def ratio_viability(live_value, dead_value, live_range = [0.015, 0.09], dead_range = [0.08, 0.02], resolution = 0.01): #### ranges [c_0, c_100]
-
-    value = live_value/dead_value
-    
-    step = int(100/resolution)
-    live = np.linspace(live_range[0], live_range[1], num=step)
-    dead = np.linspace(dead_range[0], dead_range[1], num=step)
-    ratio = np.divide(live,dead)
-    
-    if (live_value < live_range[0]) and (dead_value < dead_range[0]):
-        viability = -1
-    else:
-        index = -1
-        #### search through the table data
-        for i in range(step):
-            if (ratio[i]-value) >= 0:
-                index = i
-                break
-
-        viability = index/step*100
-
-        if (index == -1) and (value < ratio[0]):
-            viability = 0
-
-        if (index == -1) and (value > ratio[step-1]):
-            viability = 101 
-    
-    return viability
-
-
-
-#### circular mask for intensity measurements of each well
-def create_circular_mask(h, w, center=None, radius=None):
-
-    if center is None: # use the middle of the image
-        center = (int(w/2), int(h/2))
-    if radius is None: # use the smallest distance between the center and image walls
-        radius = min(center[0], center[1], w-center[0], h-center[1])
-
-    Y, X = np.ogrid[:h, :w]
-    dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
-
-    mask = dist_from_center >= radius
-    return mask
-
-
-#### calculation of the fluorescence intensities of the wells
-def calc_fluo(regions, image, image_live, image_dead, num_channels):
-    global settings
-    global device_type
-    global cell_type
-    
-    radius = settings['radius'][device_type]
-    offset = settings['offset']
-    
-    radius_mask = radius + offset
-    stats = []
-    frames =[]
-    
-    
-    if num_channels == 1:
-
-        masked_img = image.copy()    
-
-        thresh = threshold_yen(masked_img)
-
-        for i, region in enumerate(regions):
-
-            #### mask image inside circle
-            x0, y0 = region
-
-            # crop image to circle of interest
-            x_low = int(round(x0, 0)) - radius_mask
-            x_high = int(round(x0, 0)) + radius_mask
-            y_low = int(round(y0, 0)) - radius_mask
-            y_high = int(round(y0, 0)) + radius_mask
-
-            cropped_img = masked_img[y_low:y_high, x_low:x_high]
-            frames.append((cropped_img))
-
-            mask = create_circular_mask(w=radius_mask*2, h=radius_mask*2, center=(radius_mask, radius_mask), radius=radius)
-
-            total_num_pixels = np.sum(~mask)
-            
-            cropped_img[mask] = 0
-            # count how many pixels in mask/circle
-            intensity_gray = np.sum(cropped_img) / total_num_pixels
-            
-            bw = closing(cropped_img < thresh, square(2))
-            cleared = clear_border(bw)
-
-            tot_num_pixels = np.sum(~bw)
-            area = (total_num_pixels - tot_num_pixels)/total_num_pixels
-
-            stats.append((x0, y0, area, intensity_gray))
-    
-    
-    
-    if num_channels == 2:
-
-        masked_img = image.copy()    
-        masked_img_live = image_live.copy()
-
-        thresh = threshold_yen(masked_img)
-
-        for i, region in enumerate(regions):
-
-            #### mask image inside circle
-            x0, y0 = region
-
-            # crop image to circle of interest
-            x_low = int(round(x0, 0)) - radius_mask
-            x_high = int(round(x0, 0)) + radius_mask
-            y_low = int(round(y0, 0)) - radius_mask
-            y_high = int(round(y0, 0)) + radius_mask
-
-            cropped_img = masked_img[y_low:y_high, x_low:x_high]
-            cropped_img_live = masked_img_live[y_low:y_high, x_low:x_high]
-                        
-            frames.append((cropped_img, cropped_img_live))
-
-            mask = create_circular_mask(w=radius_mask*2, h=radius_mask*2, center=(radius_mask, radius_mask), radius=radius)
-
-            total_num_pixels = np.sum(~mask)
-
-            cropped_img[mask] = 0
-            cropped_img_live[mask] = 0
-
-            #### calculate sum intensity
-            #intensity = np.sum(masked_img) / num_active_pixels  # scale just to get lower number to look at
-            intensity_gray = np.sum(cropped_img) / total_num_pixels
-            intensity_live = np.sum(cropped_img_live) / total_num_pixels
-
-            # count how many pixels in mask/circle
-
-            bw = closing(cropped_img < thresh, square(2))
-            cleared = clear_border(bw)
-
-            tot_num_pixels = np.sum(~bw)
-            area = (total_num_pixels - tot_num_pixels)/total_num_pixels
-
-        
-            stats.append((x0, y0, area, intensity_gray, intensity_live))
-
-
-    
-    
-    if num_channels >= 3:
-
-        masked_img = image.copy()    
-        masked_img_live = image_live.copy()
-        masked_img_dead = image_dead.copy()
-
-        thresh = threshold_yen(masked_img)
-
-        for i, region in enumerate(regions):
-
-            #### mask image inside circle
-            x0, y0 = region
-
-            # crop image to circle of interest
-            x_low = int(round(x0, 0)) - radius_mask
-            x_high = int(round(x0, 0)) + radius_mask
-            y_low = int(round(y0, 0)) - radius_mask
-            y_high = int(round(y0, 0)) + radius_mask
-
-            cropped_img = masked_img[y_low:y_high, x_low:x_high]
-            cropped_img_live = masked_img_live[y_low:y_high, x_low:x_high]
-            cropped_img_dead = masked_img_dead[y_low:y_high, x_low:x_high]
-            frames.append((cropped_img, cropped_img_live, cropped_img_dead))
-
-            mask = create_circular_mask(w=radius_mask*2, h=radius_mask*2, center=(radius_mask, radius_mask), radius=radius)
-
-            total_num_pixels = np.sum(~mask)
-
-            cropped_img[mask] = 0
-            cropped_img_live[mask] = 0
-            cropped_img_dead[mask] = 0
-
-            #### calculate sum intensity
-            #intensity = np.sum(masked_img) / num_active_pixels  # scale just to get lower number to look at
-            intensity_gray = np.sum(cropped_img) / total_num_pixels
-            intensity_live = np.sum(cropped_img_live) / total_num_pixels
-            intensity_dead = np.sum(cropped_img_dead) / total_num_pixels 
-
-            # count how many pixels in mask/circle
-
-            bw = closing(cropped_img < thresh, square(2))
-            cleared = clear_border(bw)
-
-            tot_num_pixels = np.sum(~bw)
-            area = (total_num_pixels - tot_num_pixels)/total_num_pixels
-            
-            stats.append((x0, y0, area, intensity_gray, intensity_live, intensity_dead, intensity_live/intensity_dead, ratio_viability(intensity_live,intensity_dead, live_range = settings['live_range'][cell_type], dead_range = settings['dead_range'][cell_type])))
-
-    return stats, frames
-
-
-def plot_hist(data, bins, canvas):
-    global figure_canvas_agg
-    
-    if figure_canvas_agg:
-        figure_canvas_agg.get_tk_widget().forget()
-        plt.close('all')
-
-    figure, ax = plt.subplots()
-    labels = []
-    color_scheme = plt.cm.get_cmap('tab10')
-    for i, dev in enumerate(data['device'].unique()):
-        data[data.device == dev]['Viability'].plot.hist(density=True, ax=ax, bins = bins, color = color_scheme(i), alpha=0.5, rwidth=0.85)
-        data[data.device == dev]['Viability'].plot.kde(ax=ax, legend=True, bw_method=1, color = color_scheme(i))
-        labels.append('Device ' + str(i+1))
-
-    ax.set_ylabel('Probability', fontsize = 14)
-    ax.set_xlim(0,100)
-    ax.set_xlabel('Cell viability', fontsize = 14)
-    ax.legend(labels)
-    
-    figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
-    figure_canvas_agg.draw()
-    figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
-    
-    return figure
-
-#Defining objective function (Hill equation)
-def hill(c, e1, h, ec):
-    return 1+np.divide(e1-1,np.power(np.divide(ec,c),h)+1) 
-
-def norm_conc(x0, norm_bounds):
-    try:
-        norm_bounds_log = np.log10(norm_bounds)
-        x0_log = np.log10(x0)
-        x_scaled = (x0_log - min(norm_bounds_log))/(max(norm_bounds_log) - min(norm_bounds_log))
-    except:
-        x_scalled = []
-    return x_scaled
-    
-def norm_conc_inverse(x, norm_bounds):
-    norm_bounds_log = np.log10(norm_bounds)
-    x_inverse = (x*(max(norm_bounds_log) - min(norm_bounds_log)))+min(norm_bounds_log)
-    x_scaled = np.power(10,x_inverse)
-    return x_scaled
-
-def cell_viability(x, y, z, fit_x, fit_y, fit_z):
-        
-    cv_x = hill(x, fit_x[0], fit_x[1], fit_x[2])
-    cv_y = hill(y, fit_y[0], fit_y[1], fit_y[2])
-    cv_z = hill(z, fit_z[0], fit_z[1], fit_z[2])
-   
-    cv = cv_x*cv_y*cv_z
-    return cv 
-
-def norm_data_inverse(data_raw,fit_dict):
-    data = data_raw.copy()
-    data['conc0_inv'] = norm_conc_inverse(data['conc0'],fit_dict['bounds'][0])
-    data['conc1_inv'] = norm_conc_inverse(data['conc1'],fit_dict['bounds'][1])
-    data['conc2_inv'] = norm_conc_inverse(data['conc2'],fit_dict['bounds'][2])
-    return data
-
-def dilution(conc,stock, vol):
-    v = round(vol*conc/stock,1)
-    return v
-
-def dil_table(data, stock, vol = 1000):
-    data_dil = data.copy()
-    data_dil['vol0'] = dilution(data_dil['conc0_inv'],stock[0],vol)
-    data_dil['vol1'] = dilution(data_dil['conc1_inv'],stock[1],vol)
-    data_dil['vol2'] = dilution(data_dil['conc2_inv'],stock[2],vol)
-    data_dil['vol_media'] = vol - data_dil['vol0'] - data_dil['vol1']- data_dil['vol2']
-
-    return data_dil
-
-def plot_data(data, settings, canvas):
-    global figure_canvas_agg
-    
-    if figure_canvas_agg:
-        figure_canvas_agg.get_tk_widget().forget()
-        plt.close('all')
-    
-
-    fig = plt.figure(figsize = (10,7))
-    ax = fig.add_subplot(projection='3d')
-    
-    parameters = {'xtick.labelsize': 14,
-              'ytick.labelsize': 14,
-              'font.family':'sans-serif',
-              'font.sans-serif':['Arial']}
-    plt.rcParams.update(parameters) 
-    
-    ax = plt.axes(projection='3d')
-    fig.patch.set_facecolor('white')
-    
-    cv = False
-    syn = False
-    conc = False
-    
-    if settings['cv_flag']:
-        cmap = plt.cm.Greens
-        norm = plt.Normalize(vmin=0, vmax=1)
-        cv = True
-               
-    elif settings['synergy_flag']:
-        norm = plt.Normalize(vmin=-0.3, vmax=0.3)
-        cmap = plt.cm.RdYlGn
-        syn = True
-    
-    elif settings['conc_flag']:
-        norm = plt.Normalize(vmin=0, vmax=1.7)
-        cmap = plt.cm.Reds
-        conc = True
-    
-    else:
-        cmap = plt.cm.Greens
-        norm = plt.Normalize(vmin=-0.5, vmax=0.5)
-    
-    for i in range(len(data.index)):
-        x = data.iloc[i]['conc0']
-        y = data.iloc[i]['conc1']
-        z = data.iloc[i]['conc2']
-        
-        if settings['3D_text']:
-            if not(np.isnan(data.iloc[i]['ci'])):
-                ax.text(x, y, z, data.iloc[i]['name'])
-        
-        if syn:
-            if not (np.isnan(data.iloc[i]['ci'])):
-                col = data.iloc[i]['ci']
-                p = ax.scatter3D(x, y, z, c=cmap(norm(col)), alpha = settings['3D_alpha'], s=150)
-        
-        elif cv:
-            if not (np.isnan(data.iloc[i]['ci'])):
-                col = data.iloc[i]['cv_exp']
-                p = ax.scatter3D(x, y, z, c=cmap(norm(col)), alpha = settings['3D_alpha'], s=150)
-        
-        elif conc:
-            if not (np.isnan(data.iloc[i]['ci'])):
-                col = data.iloc[i]['conc_total']
-                p = ax.scatter3D(x, y, z, c=cmap(norm(col)), alpha = settings['3D_alpha'], s=150)
-        
-                               
-        else:
-            if data.iloc[i]['feas']:
-                color = 'green'
-            else:
-                color = 'red'            
-            if not(np.isnan(data.iloc[i]['ci'])):
-                color = 'grey'
-            ax.scatter3D(x, y, z, c=color, alpha = settings['3D_alpha'], s=150)
-          
-        
-        
-
-    ax.zaxis._axinfo['juggled'] = (1,2,0)
-    ax.yaxis._axinfo['juggled'] = (0,1,2)
-    #ax.set_title(title, fontsize=16)
-    ax.xaxis._axinfo['label']['space_factor'] = 1
-
-    ax.set_xlabel('DOX     ', fontsize=16,fontweight='bold', labelpad =10)
-    ax.set_ylabel('CPA    ', fontsize=16,fontweight='bold', labelpad =10)
-    ax.set_zlabel('5-FU    ', fontsize=16,fontweight='bold', labelpad =10)
-    ax.set_ylim(0,1)
-    ax.set_xlim(0,1)
-    ax.set_zlim(0,1)
-        
-    if syn:
-        cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), shrink=0.6, aspect=20)
-        cbar.set_label("CI", fontsize=16, fontweight='bold', labelpad =10)
-
-    
-    elif cv:
-        cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), shrink=0.6, aspect=20)
-        cbar.set_label("CV", fontsize=16, fontweight='bold', labelpad =10)
-        
-    elif conc:
-        cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), shrink=0.6, aspect=20)
-        cbar.set_label("Total concentration", fontsize=16, fontweight='bold', labelpad =10)
-
-    
-    else:
-        cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), shrink=0.6, aspect=20)
-    
-    figure_canvas_agg = FigureCanvasTkAgg(fig, canvas)
-    figure_canvas_agg.draw()
-    figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
-    
-    return fig
-
-def conc_total(x,y,z):
-    d = np.sqrt(np.square(x) + np.square(y) + np.square(z))
-    return d
-
-
-def table_show(data, fit_dict, dil):
-    
-    features =  ['conc0_inv','conc1_inv', 'conc2_inv', 'ci','cv_theor']
-    headings = ['DOX','CPA', '5-FU', 'CI','CV theor']
-    buttons = [[sg.Checkbox('Dilutions', default=dil, key="-DIL-", enable_events=True)],
-        [sg.Button('Synergy'),sg.Button('Save dataset'), sg.Button('Correct fit file'),sg.Button('Main menu'),sg.Button('Quit')]]
-
-    if dil:
-        data = dil_table(data, fit_dict['stock'])
-        features =  ['conc0_inv','conc1_inv', 'conc2_inv', 'ci','cv_theor','vol0','vol1','vol2']
-        headings = ['DOX','CPA', '5-FU', 'CI','CV theor','Vol DOX','Vol CPA','Vol 5-FU']
-        buttons = [[sg.Text('Stocks', size = (55,1)),sg.In(fit_dict['stock'][0], size = (10,1), enable_events=True, key = '-STOCK0-'),sg.In(fit_dict['stock'][1], size = (10,1), enable_events=True, key = '-STOCK1-'),sg.In(fit_dict['stock'][2], size = (10,1), enable_events=True, key = '-STOCK2-')],
-                   [sg.Checkbox('Dilutions', default=dil, key="-DIL-", enable_events=True)], 
-                   [sg.Button('Synergy'),sg.Button('Save dataset'), sg.Button('Correct fit file'), sg.Button('Main menu'),sg.Button('Quit')]]
-
-    header =  [[sg.Text(h, size=(10,1)) for h in headings]]
-
-    rows = []
-    
-    for i in range(len(data)):
-        row = [sg.Text(round(data.iloc[i][f],2), size=(10,1)) for f in features]
-        rows.append(row)
-  
-    rows = [[sg.Column(rows, scrollable=True)]]
-    layout = header + rows + buttons
-    
-    return layout
-
-def paste_to_clipboard(values = []):
-    pd.DataFrame(columns = values).to_clipboard(index= False) 
 
 def main():
     global settings
@@ -831,7 +249,8 @@ def main():
     global window
     global calc_flag
     global device_type 
-    global cell_type     
+    global cell_type   
+    global figure_canvas_agg
     
     img_filename = ''
     csv_filename = ''
@@ -939,11 +358,12 @@ def main():
                 window.TKroot.title(img_filename)
 
                 if flag_seg:
-                    image_bf_s = draw_regions(cords, image,device_type)
+                    radius = settings['radius'][device_type]
+                    image_bf_s = draw_regions(cords, image_bf, radius, window)
                     if calc_flag:              
                         window['-PLOT-'].update(visible = True)
                         if settings['hist_flag']:
-                            figure = plot_hist(df_stats, 30, window['-CANVAS-'].TKCanvas)
+                            figure, figure_canvas_agg = plot_hist(df_stats, 30, window['-CANVAS-'].TKCanvas, figure_canvas_agg)
             
               
         elif event == "-FOLDER-":   # New folder has been chosen
@@ -1236,11 +656,12 @@ def main():
                 image = image_bf.copy()
                 cords = []
                 flag_grid = True
-                image_bf_s = draw_regions(cords, image, device_type)
+                radius = settings['radius'][device_type]
+                image_bf_s = draw_regions(cords, image_bf, radius, window)
                 show_img(image_bf_s, 'Segment', settings['scaling_factor'][device_type])
                 #sg.popup("OK", "Please select 3 points on the image using LEFT CLICK\n" +
                 #            "1: TOP RIGHT well \n2: BOTTOM RIGHT well \n3: BOTTOM LEFT well \n ")
-                cv2.setMouseCallback('Segment', on_mouse_grid)
+                cv2.setMouseCallback('Segment', on_mouse_grid, device_type)
 
 
         if event == 'Add/Remove segments':
@@ -1288,7 +709,7 @@ def main():
 
         if event == 'Calculate':
             if (img_file_flag == 1) & flag_seg == 1:
-                stats, frames = calc_fluo(cords, image_bf, image_live, image_dead, num_channels)
+                stats, frames = calc_fluo(cords, image_bf, image_live, image_dead, num_channels,settings, device_type, cell_type)
                 #### converting the results in the dataframe format
 
                 df_stats = pd.DataFrame(data=stats)
@@ -1334,7 +755,7 @@ def main():
                 window['-PLOT-'].update(visible = True)
 
                 if settings['hist_flag']:
-                    figure = plot_hist(df_stats_clean, 30, window['-CANVAS-'].TKCanvas)
+                    figure, figure_canvas_agg = plot_hist(df_stats_clean, 30, window['-CANVAS-'].TKCanvas, figure_canvas_agg)
 
 
                 if num_channels >= 3:
@@ -1582,7 +1003,7 @@ def main():
             if (data_name != '') and (fit_name != ''):
                 window["-DATAFILE-"].update(data_name)
                 window["-FITFILE-"].update(fit_name)
-                figure = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas)
+                figure, figure_canvas_agg = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas, figure_canvas_agg)
                 window['-SYN-'].update(visible = True)
                 window['-SYN_3D-'].update(settings['synergy_flag'])
                 window['-CV_3D-'].update(settings['cv_flag'])
@@ -1624,7 +1045,7 @@ def main():
                     
                     #plotting of the data
 
-                    figure = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas)
+                    figure, figure_canvas_agg = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas, figure_canvas_agg)
                     
                     window['-SYN-'].update(visible = True)
                 except:
@@ -1640,36 +1061,36 @@ def main():
                     
         if event == '-ALPHA_3D-':
             settings['3D_alpha'] = float(values['-ALPHA_3D-'])
-            figure = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas)
+            figure, figure_canvas_agg = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas, figure_canvas_agg)
        
         
         if event == "-FEAS_3D-":
             settings['synergy_flag'] = values["-SYN_3D-"]
             settings['cv_flag'] = values["-CV_3D-"]
             settings['conc_flag'] = values["-CONC_3D-"]
-            figure = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas)
+            figure, figure_canvas_agg = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas, figure_canvas_agg)
             
         if event == "-TEXT_3D-":
             settings['3D_text'] = values["-TEXT_3D-"]
-            figure = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas)
+            figure, figure_canvas_agg = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas, figure_canvas_agg)
             
         if event == "-CV_3D-":
             settings['cv_flag'] = values["-CV_3D-"]
             settings['synergy_flag'] = values["-SYN_3D-"]
             settings['conc_flag'] = values["-CONC_3D-"]
-            figure = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas)
+            figure, figure_canvas_agg = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas, figure_canvas_agg)
             
         if event == "-SYN_3D-":
             settings['cv_flag'] = values["-CV_3D-"]
             settings['synergy_flag'] = values["-SYN_3D-"]
             settings['conc_flag'] = values["-CONC_3D-"]
-            figure = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas)
+            figure, figure_canvas_agg = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas, figure_canvas_agg)
             
         if event == "-CONC_3D-":
             settings['cv_flag'] = values["-CV_3D-"]
             settings['synergy_flag'] = values["-SYN_3D-"]
             settings['conc_flag'] = values["-CONC_3D-"]            
-            figure = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas)
+            figure, figure_canvas_agg = plot_data(data, settings, window['-CANVAS_SYN-'].TKCanvas, figure_canvas_agg)
             
         if event == "-DIL-":
             settings['dil_flag'] = values["-DIL-"]
@@ -1756,11 +1177,7 @@ def main():
         if event == 'Save fit file':
             pass
             
-
-            
-
-                    
-                
+             
                 
 if __name__ == "__main__":
     main()
