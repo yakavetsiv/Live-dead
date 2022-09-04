@@ -14,7 +14,7 @@ python live-dead.py
 ```
 Estimation of the absolute cell viability values for single time point:
 1.	Analysis of images
-2.	Browse - Select the folder with the file
+2.	Browse - Select the folder with the example file
 3.	Select the image
 4.	Load image
 5.	Grid 
