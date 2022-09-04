@@ -26,6 +26,12 @@ Estimation of the absolute cell viability values for single time point:
 
 
 # Configuration 
+The settings included:
+- MF arrays with 100, 200 and 300 um microwells;
+- MCF-7 and DCBXTO.58 cell types
+
+The number of the rows and wells could be changed
+
 The default settings:
 ```
 settings = {
