@@ -1,5 +1,14 @@
 # Live-dead
 Image processing script for calculation of cell viability of 3D spheroids in microfluidic arrays. 
+- [Installation](#installation)
+- [Image pre-processing](#image-pre-processing)
+- [Running the script](#running-the-script)
+  * [Absolute cell viability](#absolute-cell-viability)
+  * [Relative cell viability](#relative-cell-viability)
+- [Configuration](#configuration)
+  * [Default settings](#default-settings)
+
+
 
 # Installation
 ```
@@ -12,6 +21,7 @@ The best performance is assumed for the images of single quadruplet device. For 
 ```
 python live-dead.py
 ```
+## Absolute cell viability
 Estimation of the absolute cell viability values for single time point:
 1.	Analysis of images
 2.	Browse - Select the folder with the example file
@@ -24,6 +34,14 @@ Estimation of the absolute cell viability values for single time point:
 6. Report
 7.	Save the results
 
+## Relative cell viability
+Estimation of the relative cell viability values between two time points (e.g., before and after drug treatment):
+1. Relative cell viability
+2. Browse folder with the report ```*.csv``` files
+3. Load day1 report file
+3. Load day3 report file
+4. Select which rows of microwells to include into the analysis
+5. Report (the values are automatically coppied in the clipboard)
 
 # Configuration 
 The settings included:
@@ -32,7 +50,7 @@ The settings included:
 
 The number of the rows and wells could be changed
 
-The default settings:
+## Default settings
 ```
 settings = {
     'folder' : '/Users/viprorok/Google Диск/Laba/Github/Im_processing/Synergy index/',
