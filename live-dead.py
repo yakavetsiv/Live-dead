@@ -187,7 +187,7 @@ def on_mouse_grid(event, x, y, flags, params):
     #### add(FALSE)/remove(TRUE) point from the list
     #### to remove the point we need to left click on it once more time
     flag = 0
-    
+    print(x,y)
     if flag_grid == 1:
         if event == cv2.EVENT_LBUTTONDOWN:
             #### if the chosen pixel belongs to th already existing point - detete point
@@ -269,6 +269,7 @@ def main():
     report_flag = False
     f_flag = False
     sh_flag = False
+    bg_rep_flag = False
     
 
     
@@ -686,7 +687,7 @@ def main():
             file  = file.split('.',1)[0]
             try:
                 if (settings['devices'] == 1):
-                    if values["-BG-"] == 1:
+                    if values["-BG-"]:
                         df_stats.to_csv(path  +'/'+ file +'_report_bg.csv',index=True)
                     else:
                         df_stats.to_csv(path  +'/'+ file +'_report.csv',index=True)
@@ -727,8 +728,11 @@ def main():
 
         if event == 'Calculate':
             if (img_file_flag == 1) & flag_seg == 1:
-                                
-                stats, frames = calc_fluo(cords, image_bf, image_live, image_dead, num_channels,settings, device_type, cell_type)
+                                                
+                
+                        
+                
+                stats, frames = calc_fluo(cords, image_bf, image_live, image_dead, num_channels,settings, device_type, cell_type, 0)
                 #### converting the results in the dataframe format
 
                 df_stats = pd.DataFrame(data=stats)
@@ -744,7 +748,27 @@ def main():
 
 
                 #### calculation of the position of the well in the grid
-
+                if values["-BG-"]:
+                    radius_bg = settings['radius']['200 um']
+                    n_bg = settings['columns']
+                    cord_1 = cords[settings['rows']-1]+(radius_bg + radius,0)
+                    cord_2 = cords[settings['rows']*settings['columns']-1]+(radius_bg + radius,0)
+                    cords_bg = grid_1ch(cord_1, cord_2, (0,0), n_bg, 1)
+                    
+                    image_bf_s = draw_regions(cords_bg, image_bf, radius_bg, window)
+                    show_img(image_bf_s, 'Segment', settings['scaling_factor'][device_type])
+                    
+                    stats_bg, frames_bg = calc_fluo(cords_bg, image_bf, image_live, image_dead, num_channels, settings, '200 um', cell_type, 1)
+                    df_stats_bg = pd.DataFrame(data=stats_bg)
+                    df_stats_bg.columns = ['x0', 'y0', 'Area','Int_gray','Int_live', 'Int_dead']
+                    
+                    df_stats_bg = df_stats_bg.reset_index()
+                    num_wells = n_bg
+                    df_stats_bg['device'] = (df_stats_bg['index'] // num_wells)+1
+                    df_stats_bg['row'] = ((df_stats_bg['index'] % num_wells))+1
+                    df_stats_bg['column'] = ((df_stats_bg['index'] % num_wells))+1
+                    df_stats_bg = df_stats_bg.sort_values(by = ["device","row","x0"], ignore_index = None)
+                    
                                
 
                 df_stats = df_stats.reset_index()
@@ -775,7 +799,7 @@ def main():
                 window['-PLOT-'].update(visible = True)
 
                 if settings['hist_flag']:
-                    figure, figure_canvas_agg = plot_hist(df_stats_clean, 30, window['-CANVAS-'].TKCanvas, figure_canvas_agg)
+                    figure, figure_canvas_agg = plot_hist(df_stats_clean, 30, window['-CANVAS-'].TKCanvas, figure_canvas_agg, values["-BG-"])
 
 
                 if num_channels >= 3:
@@ -791,15 +815,18 @@ def main():
                 try:
                     if (settings['devices'] == 1):
                         if values["-BG-"] == 1:
-                            df_stats.to_csv(path  +'/'+ file +'_report_bg.csv',index=True)
+                            df_stats.to_csv(path  +'/'+ file +'_report.csv',index=True)
+                            df_stats_bg.to_csv(path  +'/'+ file +'_report_bg.csv',index=True)
                         else:
                             df_stats.to_csv(path  +'/'+ file +'_report.csv',index=True)
                         sg.popup("OK","Saved in" + path)
                     if (settings['devices'] > 1):    
                         for i in range(settings['devices']):
                             df = df_stats[df_stats.device == i+1]
+                            df_bg = df_stats[df_stats.device == i+1]
                             if values["-BG-"] == 1:
-                                df.to_csv(path  +'/'+ file +'_dev'+str(i+1)+'_report_bg.csv',index=True)
+                                df.to_csv(path  +'/'+ file +'_dev'+str(i+1)+'_report.csv',index=True)
+                                df_bg.to_csv(path  +'/'+ file +'_dev'+str(i+1)+'_report_bg.csv',index=True)
                             else:           
                                 df.to_csv(path  +'/'+ file +'_dev'+str(i+1)+'_report.csv',index=True)
                         sg.popup("OK","Saved " +str(settings['devices']) +" reports in" + path)
@@ -841,6 +868,7 @@ def main():
                 ],
                 [
                       sg.Checkbox('Short report', default=sh_flag, key="-SHORT-"),  
+                      sg.Checkbox('Background', default=bg_rep_flag, key="-BG_REPORT-"), 
                 ],
                 [
                     sg.Button('Main menu'),
@@ -946,7 +974,7 @@ def main():
             sh_flag = values["-SHORT-"]
             
             total_num_wells = settings['rows']*settings['columns']
-            
+            bg_flag = 0
             try:
                 df_d1_raw = pd.read_csv(d1_name)
                 df_d3_raw = pd.read_csv(d3_name)
@@ -967,7 +995,7 @@ def main():
                 df = df[df['column'] >= w1]
                 df = df[df['column'] <= w2]
                 
-
+                
                 df['CV'] = df['Viability_d3']/ df['Viability_d1']*100
                 
                 cv = df['CV'].mean()
@@ -987,6 +1015,32 @@ def main():
                 report_flag = True
                 
                 window['-REPORT-'].update(visible = True)
+                
+                
+                if values["-BG_REPORT-"]:
+                    path, file = os.path.split(d1_name)
+                    file  = file.split('.',1)[0]
+                    d1_name_bg = path  +'/'+ file +'_bg.csv'
+                    print(d1_name_bg)
+                    
+                    path, file = os.path.split(d3_name)
+                    file  = file.split('.',1)[0]
+                    d3_name_bg = path  +'/'+ file +'_bg.csv'
+    
+    
+                    try:
+                        df_d1_raw_bg = pd.read_csv(d1_name_bg)
+                        df_d3_raw_bg = pd.read_csv(d3_name_bg)
+                        
+                        df_d1_raw_bg = df_d1_raw_bg.rename(columns={ "Int_live": "Int_live_d1", "Int_dead": "Int_dead_d1", "column": "column_d1"})
+                        df_d3_raw_bg = df_d3_raw_bg.rename(columns={ "Int_live": "Int_live_d3", "Int_dead": "Int_dead_d3"})
+             
+                        df_bg = pd.concat([df_d1_raw_bg, df_d3_raw_bg], axis=1)
+                        bg_flag = 1
+                    except:
+                        sg.popup('Cancel',"Error loading _bg files")
+        
+                
 
                 if cell_type == 'MCF-7':
                     paste_to_clipboard([total_num_wells - load_d1,load_d1/total_num_wells,round(df['Viability_d1'].mean(),3),'','','','','','', '',total_num_wells - load_d3, 
@@ -996,7 +1050,11 @@ def main():
                                     load_d3/total_num_wells,round(df['Viability_d3'].mean(),3), round(cv,3), '', round(df['Int_live_d3'].mean(),5), round(df['Int_dead_d3'].mean(),5)])
                 
                 if sh_flag:
-                    paste_to_clipboard([round(df['Int_live_d3'].mean(),5), round(df['Int_dead_d3'].mean(),5)])
+                    if bg_flag:
+                        paste_to_clipboard([round(df['Int_live_d3'].mean(),5), round(df['Int_dead_d3'].mean(),5), '', '', '', '', '', round(df_bg['Int_live_d3'].mean(),5), round(df_bg['Int_dead_d3'].mean(),5)])
+                    else:
+                        paste_to_clipboard([round(df['Int_live_d3'].mean(),5), round(df['Int_dead_d3'].mean(),5)])
+                    
                     
             except:
                 sg.popup('Cancel',"Error loading files")

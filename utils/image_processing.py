@@ -173,7 +173,7 @@ def create_circular_mask(h, w, center=None, radius=None):
 
 
 #### calculation of the fluorescence intensities of the wells
-def calc_fluo(regions, image, image_live, image_dead, num_channels, settings, device_type, cell_type):
+def calc_fluo(regions, image, image_live, image_dead, num_channels, settings, device_type, cell_type, bg):
     
     radius = settings['radius'][device_type]
     offset = settings['offset']
@@ -182,6 +182,7 @@ def calc_fluo(regions, image, image_live, image_dead, num_channels, settings, de
     stats = []
     frames =[]
     
+
     
     if num_channels == 1:
 
@@ -316,7 +317,10 @@ def calc_fluo(regions, image, image_live, image_dead, num_channels, settings, de
             tot_num_pixels = np.sum(~bw)
             area = (total_num_pixels - tot_num_pixels)/total_num_pixels
             
-            stats.append((x0, y0, area, intensity_gray, intensity_live, intensity_dead, intensity_live/intensity_dead, ratio_viability(intensity_live,intensity_dead, live_range = settings['live_range'][cell_type], dead_range = settings['dead_range'][cell_type])))
+            if bg:
+                stats.append((x0, y0, area, intensity_gray, intensity_live, intensity_dead))
+            else:  
+                stats.append((x0, y0, area, intensity_gray, intensity_live, intensity_dead, intensity_live/intensity_dead, ratio_viability(intensity_live,intensity_dead, live_range = settings['live_range'][cell_type], dead_range = settings['dead_range'][cell_type])))
 
     return stats, frames
 
