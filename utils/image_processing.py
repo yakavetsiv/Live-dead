@@ -265,7 +265,8 @@ def calc_fluo(regions, image, image_live, image_dead, num_channels, settings, de
             tot_num_pixels = np.sum(~bw)
             area = (total_num_pixels - tot_num_pixels)/total_num_pixels
 
-        
+            if bg:
+                stats.append((x0, y0, area, intensity_gray, intensity_live))
             stats.append((x0, y0, area, intensity_gray, intensity_live))
 
 

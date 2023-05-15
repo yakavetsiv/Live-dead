@@ -15,7 +15,7 @@ from matplotlib import cm
 from utils.utils import *
 
 
-def plot_hist(data, bins, canvas, figure_canvas_agg, bg):
+def plot_hist(data, bins, canvas, figure_canvas_agg):
     
     if figure_canvas_agg:
         figure_canvas_agg.get_tk_widget().forget()
@@ -26,8 +26,7 @@ def plot_hist(data, bins, canvas, figure_canvas_agg, bg):
     color_scheme = plt.cm.get_cmap('tab10')
     for i, dev in enumerate(data['device'].unique()):
         data[data.device == dev]['Viability'].plot.hist(density=True, ax=ax, bins = bins, color = color_scheme(i), alpha=0.5, rwidth=0.85)
-        #if not(bg):
-            #data[data.device == dev]['Viability'].plot.kde(ax=ax, legend=True, bw_method=1, color = color_scheme(i))
+        data[data.device == dev]['Viability'].plot.kde(ax=ax, legend=True, bw_method=1, color = color_scheme(i))
         labels.append('Device ' + str(i+1))
 
     ax.set_ylabel('Probability', fontsize = 14)
