@@ -173,7 +173,7 @@ def create_circular_mask(h, w, center=None, radius=None):
 
 
 #### calculation of the fluorescence intensities of the wells
-def calc_fluo(regions, image, image_live, image_dead, num_channels, settings, device_type, cell_type, bg):
+def calc_fluo(regions, image, image_live, image_dead, num_channels, settings, device_type, cell_type, bg, offset_ch2):
     
     radius = settings['radius'][device_type]
     offset = settings['offset']
@@ -308,7 +308,13 @@ def calc_fluo(regions, image, image_live, image_dead, num_channels, settings, de
             #intensity = np.sum(masked_img) / num_active_pixels  # scale just to get lower number to look at
             intensity_gray = np.sum(cropped_img) / total_num_pixels
             intensity_live = np.sum(cropped_img_live) / total_num_pixels
+            
+            
             intensity_dead = np.sum(cropped_img_dead) / total_num_pixels 
+            print(ratio_viability(intensity_live,intensity_dead, live_range = settings['live_range'][cell_type], dead_range = settings['dead_range'][cell_type]))
+            intensity_dead = intensity_dead- offset_ch2
+            print('')
+            print(ratio_viability(intensity_live,intensity_dead, live_range = settings['live_range'][cell_type], dead_range = settings['dead_range'][cell_type]))
 
             # count how many pixels in mask/circle
 

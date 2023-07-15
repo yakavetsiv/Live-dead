@@ -43,7 +43,7 @@ settings = {
     'default_cell_type': 0,
     'live_range' : {'MCF-7' : [0.015, 0.09], 'MCF-7 new' : [0.0075, 0.040], 'DCBXTO.58': [0.012, 0.085]}, ##  [0.015, 0.09] for MCF-7 cells ; [0.012, 0.085] for .58
     'dead_range' : {'MCF-7' : [0.08, 0.02], 'MCF-7 new' : [0.032, 0.011], 'DCBXTO.58': [0.085, 0.02]}, ## [0.08, 0.02] for MCF-7 cells ; [0.085, 0.02] for .58
-    'hist_flag' : True,
+    'hist_flag' : False,
     'ch_flag' : False,
     'dil_flag': True,
     'cv_threshold': 0.5,
@@ -334,6 +334,7 @@ def main():
                     sg.Button('Grid'),
                     sg.Button('Add/Remove segments'),
                     sg.Txt(size=(8,1), key='-SEG-'),
+                    sg.InputText('0', size=(6, 1), key="-OFFSET-"),
                     sg.Button('Calculate')
                 ]]
             layout_buttons = [[
@@ -731,9 +732,9 @@ def main():
             if (img_file_flag == 1) & flag_seg == 1:
                                                 
                 
-                        
-                
-                stats, frames = calc_fluo(cords, image_bf, image_live, image_dead, num_channels,settings, device_type, cell_type, 0)
+                offset_ch2 = float(values["-OFFSET-"])
+                print(offset_ch2)
+                stats, frames = calc_fluo(cords, image_bf, image_live, image_dead, num_channels,settings, device_type, cell_type, 0, offset_ch2)
                 #### converting the results in the dataframe format
 
                 df_stats = pd.DataFrame(data=stats)
@@ -768,8 +769,8 @@ def main():
                     image_bf_s = draw_regions(cords_bg_a, image_bf, radius_bg, window)
                     show_img(image_bf_s, 'Segment', settings['scaling_factor'][device_type])
                     
-                    stats_bg, frames_bg = calc_fluo(cords_bg, image_bf, image_live, image_dead, num_channels, settings, device_type_bg, cell_type, 1)
-                    stats_bg_a, frames_bg_a = calc_fluo(cords_bg_a, image_bf, image_live, image_dead, num_channels, settings, device_type_bg, cell_type, 1)
+                    stats_bg, frames_bg = calc_fluo(cords_bg, image_bf, image_live, image_dead, num_channels, settings, device_type_bg, cell_type, 1, offset_ch2)
+                    stats_bg_a, frames_bg_a = calc_fluo(cords_bg_a, image_bf, image_live, image_dead, num_channels, settings, device_type_bg, cell_type, 1, offset_ch2)
                     
                     print(stats_bg)
                     df_stats_bg = pd.DataFrame(data=stats_bg)
